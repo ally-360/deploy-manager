@@ -1,0 +1,64 @@
+{
+  "realm": "ally",
+  "enabled": true,
+  "displayName": "Ally Local",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "editUsernameAllowed": false,
+  "internationalizationEnabled": true,
+  "defaultLocale": "en",
+  "clients": [
+    {
+      "clientId": "ally-api",
+      "name": "Ally API",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "bearerOnly": true,
+      "attributes": {
+        "jwt.credential.use.crl": "false"
+      }
+    },
+    {
+      "clientId": "ally-web",
+      "name": "Ally Web",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": ["+"],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false
+    }
+  ],
+  "users": [
+    {
+      "username": "owner@example.com",
+      "email": "owner@example.com",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Password1!", "temporary": false }
+      ]
+    },
+    {
+      "username": "admin@example.com",
+      "email": "admin@example.com",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Password1!", "temporary": false }
+      ]
+    }
+  ]
+}

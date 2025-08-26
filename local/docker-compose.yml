@@ -1,0 +1,159 @@
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: auth_db_local
+    environment:
+      POSTGRES_DB: auth-service
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_user -d auth-service"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Base de datos de Keycloak
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: keycloak_db_local
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    ports:
+      - "5433:5432"
+    volumes:
+      - keycloak_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Keycloak
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: keycloak_local
+    command: ["start-dev", "--hostname-strict=false", "--http-enabled=true", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_HTTP_PORT: 8080
+      KEYCLOAK_IMPORT_FORCE: ${KEYCLOAK_IMPORT_FORCE:-true}
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      # Importar realms desde carpeta
+      - ./keycloak/realms:/opt/keycloak/data/import
+      - ./keycloak/bootstrap/entrypoint.sh:/opt/keycloak/bootstrap/entrypoint.sh:ro
+      - keycloak_data:/opt/keycloak/data
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: minio_local
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  auth-service:
+    build:
+      context: ../..
+      dockerfile: deploy-manager/local/auth.Dockerfile
+    container_name: auth_service_local
+    env_file:
+      - ./.env
+    environment:
+      PORT: 4000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: auth_user
+      DB_PASSWORD: auth_password
+      KC_ISSUER: http://localhost:8080/realms/ally
+      KC_CLIENT_ID: ally-api
+      KC_JWKS_URI: http://keycloak:8080/realms/ally/protocol/openid-connect/certs
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+    ports:
+      - "4000:4000"
+    volumes:
+      - ../../auth-service:/app
+      - auth_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run start:dev"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/v1/auth/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # Storage Service con MinIO
+  storage-service:
+    build:
+      context: ../..
+      dockerfile: deploy-manager/local/storage.Dockerfile
+    container_name: storage_service_local
+    env_file:
+      - ./.env
+    environment:
+      PORT: 4001
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_USE_SSL: "false"
+      MINIO_DEFAULT_BUCKET: storage
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    depends_on:
+      minio:
+        condition: service_healthy
+    ports:
+      - "4001:4001"
+    volumes:
+      - ../../storage-service:/app
+      - storage_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run start:dev"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  auth_pg_data:
+  auth_node_modules:
+  keycloak_pg_data:
+  keycloak_data:
+  minio_data:
+  storage_node_modules:
