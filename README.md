@@ -120,6 +120,10 @@ Notas:
 Seguridad:
 - `console.ally360.co` está protegido por Basic Auth (Caddy). Define `MINIO_CONSOLE_PASSWORD_HASH` (bcrypt).
 
+Homepage (`ally360.co` / `www.ally360.co`):
+- Imagen esperada: `ghcr.io/ally-360/ally360-web:latest`.
+- Se recomienda publicarla desde el repo `webpage-platform` y disparar el deploy de este repo con `repository_dispatch`.
+
 ## Bootstrap en EC2 (primera vez)
 
 En el servidor:
