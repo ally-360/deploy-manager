@@ -1,0 +1,49 @@
+(security_headers) {
+  header {
+    -Server
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "geolocation=(), microphone=(), camera=()"
+  }
+}
+
+api.ally360.co {
+  encode gzip zstd
+  import security_headers
+
+  reverse_proxy api-a:8000 api-b:8000 {
+    lb_policy least_conn
+    health_uri /health
+    health_interval 10s
+    health_timeout 2s
+  }
+}
+
+app.ally360.co {
+  encode gzip zstd
+  import security_headers
+  reverse_proxy allyapp:80
+}
+
+s3.ally360.co {
+  encode gzip zstd
+  import security_headers
+  reverse_proxy minio:9000
+}
+
+console.ally360.co {
+  encode gzip zstd
+  import security_headers
+  basicauth {
+    admin {$MINIO_CONSOLE_PASSWORD_HASH}
+  }
+  reverse_proxy minio:9001
+}
+
+ally360.co, www.ally360.co {
+  encode gzip zstd
+  import security_headers
+  reverse_proxy ally360-web:3000
+}

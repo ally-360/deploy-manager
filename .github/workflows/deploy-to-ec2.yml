@@ -1,0 +1,51 @@
+name: Deploy to EC2
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Backend image tag for ghcr.io/ally-360/ally360-api"
+        required: true
+        default: "latest"
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [deploy]
+
+concurrency:
+  group: ally360-prod-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      GHCR_USER: ${{ secrets.GHCR_USER }}
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+      IMAGE_TAG: >-
+        ${{
+          github.event_name == 'workflow_dispatch' && inputs.image_tag ||
+          (github.event_name == 'repository_dispatch' && github.event.client_payload.image_tag) ||
+          'latest'
+        }}
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GHCR_USER,GHCR_TOKEN,IMAGE_TAG
+          script_stop: true
+          script: |
+            set -euo pipefail
+            export GHCR_USER GHCR_TOKEN
+
+            cd /opt/ally360/deploy-manager
+            git fetch --all --prune
+            git pull --ff-only
+            bash scripts/deploy.sh "$IMAGE_TAG"

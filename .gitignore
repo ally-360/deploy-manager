@@ -1,3 +1,21 @@
+
+# Local env files (never commit secrets)
 .env
+env/.env
+
+# Infra (Serverless)
+infra/node_modules/
+infra/.serverless/
+npm-debug.log*
 
 .DS_Store
+
+# Serverless Framework
+.serverless/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
