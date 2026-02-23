@@ -36,7 +36,7 @@ s3.ally360.co {
 console.ally360.co {
   encode gzip zstd
   import security_headers
-  basicauth {
+  basic_auth {
     admin {$MINIO_CONSOLE_PASSWORD_HASH}
   }
   reverse_proxy minio:9001

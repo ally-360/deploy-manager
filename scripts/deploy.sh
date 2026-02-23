@@ -26,6 +26,36 @@ compose() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
 
+get_env_value() {
+  local key="$1"
+  awk -F= -v k="$key" '
+    $0 !~ /^[[:space:]]*#/ && $0 ~ "^"k"=" {
+      sub("^"k"=", "", $0);
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0);
+      if ($0 ~ /^".*"$/) { sub(/^"/, "", $0); sub(/"$/, "", $0) }
+      if ($0 ~ /^\x27.*\x27$/) { sub(/^\x27/, "", $0); sub(/\x27$/, "", $0) }
+      print $0
+    }
+  ' "$ENV_FILE" | tail -n 1
+}
+
+require_bcrypt_hash() {
+  local var_name="$1"
+  local value
+  value="$(get_env_value "$var_name")"
+
+  if [[ -z "$value" ]]; then
+    echo "ERROR: Falta $var_name en $ENV_FILE (requerido para Caddy basic_auth)"
+    exit 1
+  fi
+
+  if [[ ! "$value" =~ ^\$2[aby]\$ ]] || (( ${#value} < 50 )); then
+    echo "ERROR: $var_name no parece un hash bcrypt válido (ej: \$2a\$14\$...)"
+    echo "Genera uno con: docker run --rm caddy:2 caddy hash-password --plaintext 'TU_PASSWORD'"
+    exit 1
+  fi
+}
+
 wait_healthy() {
   local service="$1"
   local timeout_seconds="${2:-180}"
@@ -61,18 +91,31 @@ wait_healthy() {
   done
 }
 
+require_bcrypt_hash "MINIO_CONSOLE_PASSWORD_HASH"
+
 echo "Pull de imágenes..."
 compose pull
 
 echo "Asegurando servicios base arriba (db/redis/minio/frontends/caddy)..."
 compose up -d postgres redis minio allyapp ally360-web caddy
 
+echo "Ejecutando migraciones (one-shot service)..."
+compose run --rm migrations
+
+echo "Validando migraciones en Postgres (alembic_version + users)..."
+if ! compose exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('"'"'public.alembic_version'"'"')" | grep -q alembic_version'; then
+  echo "ERROR: alembic_version no existe después de migrar"
+  exit 1
+fi
+
+if ! compose exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "select to_regclass('"'"'public.users'"'"')" | grep -q users'; then
+  echo "ERROR: users no existe después de migrar (evita relation \"users\" does not exist)"
+  exit 1
+fi
+
 echo "Rolling update API: api-b -> api-a"
 compose up -d --no-deps --force-recreate api-b
 wait_healthy api-b 240
-
-echo "Ejecutando migraciones (una sola vez)..."
-compose run --rm api-b python migrate.py upgrade
 
 compose up -d --no-deps --force-recreate api-a
 wait_healthy api-a 240
