@@ -160,7 +160,7 @@ GHCR_USER=... GHCR_TOKEN=... ./scripts/deploy.sh 2026-02-22
 
 Notas:
 - El script hace rolling update: sube `api-b` → espera health → sube `api-a` → espera health.
-- Ejecuta migraciones **una sola vez** con `docker compose run --rm api-a python migrate.py upgrade`.
+- Ejecuta migraciones **una sola vez** con el servicio one-shot `migrations` (Alembic upgrade head).
 - Reinicia `celery-worker` y `celery-beat`.
 - Recarga Caddy (sin tumbar TLS).
 
